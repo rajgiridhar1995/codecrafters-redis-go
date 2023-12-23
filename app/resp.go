@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
+	"io"
 	"strconv"
 )
 
@@ -14,111 +17,202 @@ const (
 	CRLF = "\r\n"
 )
 
-type Type byte
-
 const (
 	SimpleStrings = '+'
 	SimpleErrors  = '-'
 	Integers      = ':'
 	BulkStrings   = '$'
 	Arrays        = '*'
+	Nulls         = '_'
 )
 
-type RESP struct {
-	Type  Type
-	Raw   []byte
-	Data  []byte
-	Count int
+type Value struct {
+	Type  rune
+	Data  interface{}
+	Array []Value
 }
 
-func (r RESP) Bytes() []byte {
-	return r.Data
-}
-
-func (r RESP) String() string {
-	return string(r.Data)
-}
-
-func (r RESP) Int() int64 {
-	x, _ := strconv.ParseInt(r.String(), 10, 64)
-	return x
-}
-
-func (r RESP) Float() float64 {
-	x, _ := strconv.ParseFloat(r.String(), 10)
-	return x
-}
-
-func (r RESP) Exists() bool {
-	return r.Type != 0
-}
-
-func ReadNextRESP(b []byte) (int, RESP) {
-	if len(b) == 0 {
-		return 0, RESP{}
+func (v Value) Marshal() []byte {
+	switch v.Type {
+	case SimpleStrings:
+		return v.marshalSimpleStrings()
+	case SimpleErrors:
+		return v.marshalSimpleErrors()
+	case Integers:
+		return v.marshalIntegers()
+	case BulkStrings:
+		return v.marshalBulkStrings()
+	case Arrays:
+		return v.marshalArrays()
+	case Nulls:
+		return v.marshalNulls()
 	}
-	resp := RESP{}
-	resp.Type = Type(b[0])
-	switch resp.Type {
-	case SimpleStrings, SimpleErrors, Integers, BulkStrings, Arrays:
+	return nil
+}
+
+func (v Value) marshalSimpleStrings() []byte {
+	var bytes []byte
+	bytes = append(bytes, SimpleStrings)
+	bytes = append(bytes, v.Data.(string)...)
+	return append(bytes, CR, LF)
+}
+
+func (v Value) marshalSimpleErrors() []byte {
+	var bytes []byte
+	bytes = append(bytes, SimpleErrors)
+	bytes = append(bytes, v.Data.(string)...)
+	return append(bytes, CR, LF)
+}
+
+func (v Value) marshalIntegers() []byte {
+	var bytes []byte
+	bytes = append(bytes, Integers)
+	bytes = append(bytes, v.Data.(string)...)
+	return append(bytes, CR, LF)
+}
+
+func (v Value) marshalBulkStrings() []byte {
+	var bytes []byte
+	bytes = append(bytes, BulkStrings)
+	size := strconv.FormatInt(int64(len(v.Data.(string))), 10)
+	bytes = append(bytes, size...)
+	bytes = append(bytes, CR, LF)
+	bytes = append(bytes, v.Data.(string)...)
+	return append(bytes, CR, LF)
+}
+
+func (v Value) marshalArrays() []byte {
+	var bytes []byte
+	bytes = append(bytes, Arrays)
+	size := len(v.Array)
+	bytes = append(bytes, strconv.Itoa(size)...)
+	bytes = append(bytes, CR, LF)
+	for i := 0; i < size; i++ {
+		bytes = append(bytes, v.Array[i].Marshal()...)
+	}
+	return bytes
+}
+
+func (v Value) marshalNulls() []byte {
+	return []byte("_\r\n")
+}
+
+type Resp struct {
+	reader *bufio.Reader
+}
+
+func NewResp(r io.Reader) *Resp {
+	return &Resp{
+		reader: bufio.NewReader(r),
+	}
+}
+
+func (r *Resp) Read() (Value, error) {
+	typ, err := r.reader.ReadByte()
+	if err != nil {
+		return Value{}, err
+	}
+	switch typ {
+	case SimpleStrings:
+		return r.readSimpleStrings()
+	case BulkStrings:
+		return r.readBulkStrings()
+	case Arrays:
+		return r.readArrays()
 	default:
-		return 0, RESP{}
+		fmt.Printf("received unknown type: %v\n", string(typ))
+		return Value{}, nil
 	}
-	// read to end of line
-	i := 1
-	for ; ; i++ {
-		if i == len(b) {
-			return 0, RESP{}
+}
+
+func (r *Resp) readSimpleStrings() (Value, error) {
+	v := Value{}
+	v.Type = SimpleStrings
+	line, _, err := r.readLine()
+	if err != nil {
+		return Value{}, err
+	}
+	v.Data = string(line)
+	return v, nil
+}
+
+func (r *Resp) readArrays() (Value, error) {
+	v := Value{}
+	v.Type = Arrays
+	len, _, err := r.readInteger()
+	if err != nil {
+		return Value{}, err
+	}
+	v.Array = make([]Value, 0)
+	for i := 0; i < len; i++ {
+		val, err := r.Read()
+		if err != nil {
+			return Value{}, err
 		}
-		if b[i] == LF {
-			if b[i] != CR {
-				return 0, RESP{}
-			}
-			i++
+		v.Array = append(v.Array, val)
+	}
+	return v, nil
+}
+
+func (r *Resp) readBulkStrings() (Value, error) {
+	v := Value{}
+	v.Type = BulkStrings
+	len, _, err := r.readInteger()
+	if err != nil {
+		return Value{}, err
+	}
+	bulk := make([]byte, len)
+	_, err = r.reader.Read(bulk)
+	if err != nil {
+		return Value{}, err
+	}
+	v.Data = string(bulk)
+	r.reader.ReadLine()
+	return v, nil
+}
+
+func (r *Resp) readInteger() (val int, n int, err error) {
+	line, n, err := r.readLine()
+	if err != nil {
+		return 0, 0, err
+	}
+	i64, err := strconv.ParseInt(string(line), 10, 64)
+	if err != nil {
+		return 0, n, err
+	}
+	return int(i64), n, nil
+}
+
+func (r *Resp) readLine() (line []byte, n int, err error) {
+	for {
+		b, err := r.reader.ReadByte()
+		if err != nil {
+			return nil, 0, err
+		}
+		n++
+		line = append(line, b)
+		if len(line) >= 2 && line[len(line)-2] == CR && line[len(line)-1] == LF {
 			break
 		}
 	}
-	resp.Raw = b[0:i]
-	resp.Data = b[1 : i-2]
-	if resp.Type == Integers {
-		// Integer
-		if len(resp.Data) == 0 {
-			return 0, RESP{} //, invalid integer
-		}
-		var j int
-		if resp.Data[0] == '-' {
-			if len(resp.Data) == 1 {
-				return 0, RESP{} //, invalid integer
-			}
-			j++
-		}
-		for ; j < len(resp.Data); j++ {
-			if resp.Data[j] < '0' || resp.Data[j] > '9' {
-				return 0, RESP{} // invalid integer
-			}
-		}
-		return len(resp.Raw), resp
-	}
-	if resp.Type == SimpleStrings || resp.Type == SimpleErrors {
-		// String, Error
-		return len(resp.Raw), resp
-	}
-	var err error
-	resp.Count, err = strconv.Atoi(string(resp.Data))
+	return line[:len(line)-2], n, nil
+}
+
+type Writer struct {
+	writer io.Writer
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{writer: w}
+}
+
+func (w *Writer) Write(v Value) error {
+	var bytes = v.Marshal()
+
+	_, err := w.writer.Write(bytes)
 	if err != nil {
-		return 0, RESP{}
+		return err
 	}
-	var tn int
-	sdata := b[i:]
-	for j := 0; j < resp.Count; j++ {
-		rn, rresp := ReadNextRESP(sdata)
-		if rresp.Type == 0 {
-			return 0, RESP{}
-		}
-		tn += rn
-		sdata = sdata[rn:]
-	}
-	resp.Data = b[i : i+tn]
-	resp.Raw = b[0 : i+tn]
-	return len(resp.Raw), resp
+
+	return nil
 }
