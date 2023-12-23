@@ -33,7 +33,7 @@ func handleNewConnection(conn net.Conn) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			fmt.Println("failed to read from connection", err)
-			os.Exit(1)
+			return
 		}
 		if n == 0 {
 			fmt.Println("connection closed")
