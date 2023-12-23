@@ -26,6 +26,7 @@ func main() {
 }
 
 func handleNewConnection(conn net.Conn) {
+	fmt.Println("received a new connection")
 	defer conn.Close()
 	buf := make([]byte, 1024)
 	for {
