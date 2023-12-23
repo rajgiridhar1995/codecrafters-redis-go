@@ -14,6 +14,7 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+	fmt.Println("Started server")
 	for {
 		conn, err := l.Accept()
 		if err != nil {
