@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -39,7 +40,15 @@ func handleNewConnection(conn net.Conn) {
 			fmt.Println("connection closed")
 			return
 		}
-		fmt.Println("received:", string(buf[:n]))
-		conn.Write([]byte("+PONG\r\n"))
+		buf = buf[:n]
+		fmt.Println("received:", string(buf))
+		command := string(buf)
+		cmdSplit := strings.Split(command, "\r\n")
+		switch strings.ToUpper(cmdSplit[2]) {
+		case "PING":
+			conn.Write([]byte("+PONG\r\n"))
+		case "ECHO":
+			conn.Write([]byte(fmt.Sprint("+", cmdSplit[len(cmdSplit)-2], "\r\n")))
+		}
 	}
 }
