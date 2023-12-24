@@ -54,31 +54,35 @@ func (v Value) marshalSimpleStrings() []byte {
 	var bytes []byte
 	bytes = append(bytes, SimpleStrings)
 	bytes = append(bytes, v.Data.(string)...)
-	return append(bytes, CR, LF)
+	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalSimpleErrors() []byte {
 	var bytes []byte
 	bytes = append(bytes, SimpleErrors)
 	bytes = append(bytes, v.Data.(string)...)
-	return append(bytes, CR, LF)
+	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalIntegers() []byte {
 	var bytes []byte
 	bytes = append(bytes, Integers)
 	bytes = append(bytes, v.Data.(string)...)
-	return append(bytes, CR, LF)
+	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalBulkStrings() []byte {
 	var bytes []byte
 	bytes = append(bytes, BulkStrings)
+	if len(v.Data.(string)) == 2 && v.Data.(string) == "-1" {
+		bytes = append(bytes, v.Data.(string)...)
+		return append(bytes, CRLF...)
+	}
 	size := strconv.FormatInt(int64(len(v.Data.(string))), 10)
 	bytes = append(bytes, size...)
-	bytes = append(bytes, CR, LF)
+	bytes = append(bytes, CRLF...)
 	bytes = append(bytes, v.Data.(string)...)
-	return append(bytes, CR, LF)
+	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalArrays() []byte {
@@ -86,7 +90,7 @@ func (v Value) marshalArrays() []byte {
 	bytes = append(bytes, Arrays)
 	size := len(v.Array)
 	bytes = append(bytes, strconv.Itoa(size)...)
-	bytes = append(bytes, CR, LF)
+	bytes = append(bytes, CRLF...)
 	for i := 0; i < size; i++ {
 		bytes = append(bytes, v.Array[i].Marshal()...)
 	}
@@ -94,7 +98,9 @@ func (v Value) marshalArrays() []byte {
 }
 
 func (v Value) marshalNulls() []byte {
-	return []byte("_\r\n")
+	var bytes []byte
+	bytes = append(bytes, Nulls)
+	return append(bytes, CRLF...)
 }
 
 type Resp struct {
