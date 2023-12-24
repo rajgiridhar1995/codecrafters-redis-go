@@ -3,22 +3,18 @@ package main
 import (
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
-var db = map[string]string{}
-var expiration = map[string]time.Time{}
-var lock = sync.Mutex{}
-
-var Commands = map[string]func([]Value) Value{
-	"PING": commandPing,
-	"ECHO": commandEcho,
-	"GET":  commandGet,
-	"SET":  commandSet,
+var Commands = map[string]func(db *DB, val []Value) Value{
+	"PING":   commandPing,
+	"ECHO":   commandEcho,
+	"GET":    commandGet,
+	"SET":    commandSet,
+	"CONFIG": commandConfig,
 }
 
-func commandPing(args []Value) Value {
+func commandPing(db *DB, args []Value) Value {
 	if len(args) == 0 {
 		return Value{
 			Type: SimpleStrings,
@@ -31,7 +27,7 @@ func commandPing(args []Value) Value {
 	}
 }
 
-func commandEcho(args []Value) Value {
+func commandEcho(db *DB, args []Value) Value {
 	if len(args) != 1 {
 		return Value{
 			Type: SimpleErrors,
@@ -44,7 +40,7 @@ func commandEcho(args []Value) Value {
 	}
 }
 
-func commandGet(args []Value) Value {
+func commandGet(db *DB, args []Value) Value {
 	if len(args) != 1 {
 		return Value{
 			Type: SimpleErrors,
@@ -52,17 +48,17 @@ func commandGet(args []Value) Value {
 		}
 	}
 	key := args[0].Data.(string)
-	lock.Lock()
-	defer lock.Unlock()
-	val, ok := db[key]
+	db.lock.Lock()
+	defer db.lock.Unlock()
+	val, ok := db.db[key]
 	if !ok {
 		return Value{
 			Type: Nulls,
 		}
 	}
-	if exp, ok := expiration[key]; ok && time.Now().After(exp) {
-		delete(db, key)
-		delete(expiration, key)
+	if exp, ok := db.expiration[key]; ok && time.Now().After(exp) {
+		delete(db.db, key)
+		delete(db.expiration, key)
 		return Value{
 			Type: BulkStrings,
 			Data: "-1",
@@ -75,7 +71,7 @@ func commandGet(args []Value) Value {
 	}
 }
 
-func commandSet(args []Value) Value {
+func commandSet(db *DB, args []Value) Value {
 	if len(args) < 2 {
 		return Value{
 			Type: SimpleErrors,
@@ -85,9 +81,9 @@ func commandSet(args []Value) Value {
 	key := args[0].Data.(string)
 	val := args[1].Data.(string)
 
-	lock.Lock()
-	db[key] = val
-	defer lock.Unlock()
+	db.lock.Lock()
+	db.db[key] = val
+	defer db.lock.Unlock()
 	if len(args) >= 4 && strings.ToUpper(args[2].Data.(string)) == "PX" {
 		px, err := strconv.Atoi(args[3].Data.(string))
 		if err != nil {
@@ -97,10 +93,46 @@ func commandSet(args []Value) Value {
 			}
 		}
 		expirationTime := time.Now().Add(time.Duration(px) * time.Millisecond)
-		expiration[key] = expirationTime
+		db.expiration[key] = expirationTime
 	}
 	return Value{
 		Type: SimpleStrings,
 		Data: "OK",
 	}
+}
+
+func commandConfig(db *DB, args []Value) Value {
+	if len(args) != 2 {
+		return Value{
+			Type: SimpleErrors,
+			Data: "ERR wrong number of arguments for 'config' command",
+		}
+	}
+	v := Value{
+		Type:  Arrays,
+		Array: []Value{},
+	}
+	// TODO check for first args
+	configKey := args[1].Data.(string)
+	switch strings.ToUpper(configKey) {
+	case "DIR":
+		v.Array = append(v.Array, Value{
+			Type: SimpleStrings,
+			Data: "dir",
+		})
+		v.Array = append(v.Array, Value{
+			Type: SimpleStrings,
+			Data: db.config.AofDir,
+		})
+	case "DBFILENAME":
+		v.Array = append(v.Array, Value{
+			Type: SimpleStrings,
+			Data: "dbfilename",
+		})
+		v.Array = append(v.Array, Value{
+			Type: SimpleStrings,
+			Data: db.config.AofFileName,
+		})
+	}
+	return v
 }

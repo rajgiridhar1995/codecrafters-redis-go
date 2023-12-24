@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -10,13 +11,24 @@ import (
 func main() {
 	fmt.Println("Logs from your program will appear here!")
 
+	dir := flag.String("dir", "/tmp", "The directory where RDB files are stored")
+	dbfilename := flag.String("dbfilename", "dump.rdb", "The name of the RDB file")
+
+	flag.Parse()
+	fmt.Println("dir:", *dir)
+	fmt.Println("dbfilename:", *dbfilename)
+
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+	conf := Config{
+		AofDir:      *dir,
+		AofFileName: *dbfilename,
+	}
+	db := NewDB(conf)
 	fmt.Println("Started server")
-	db := map[string]string{}
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -27,7 +39,7 @@ func main() {
 	}
 }
 
-func handleNewConnection(conn net.Conn, db map[string]string) {
+func handleNewConnection(conn net.Conn, db *DB) {
 	fmt.Println("received a new connection")
 	defer conn.Close()
 	for {
@@ -57,7 +69,7 @@ func handleNewConnection(conn net.Conn, db map[string]string) {
 			})
 			continue
 		}
-		res := handler(args)
+		res := handler(db, args)
 		writer.Write(res)
 	}
 }
