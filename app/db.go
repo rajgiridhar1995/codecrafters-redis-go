@@ -276,6 +276,7 @@ func readLengthEncoding(reader *bufio.Reader) (int, error) {
 		fmt.Println(err)
 		return 0, err
 	}
+
 	// fmt.Println("num:", num)
 	switch {
 	case num <= 0b00111111: // bits: 00xxxxxx
