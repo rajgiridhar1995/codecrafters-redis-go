@@ -50,19 +50,19 @@ func (db *DB) ReadRDB() error {
 	}
 
 	// TODO: remove this >>>
-	f, err := os.Open(filePath)
-	if err != nil {
-		fmt.Println("failed to read RDB", err)
-		os.Exit(1)
-	}
-	r := bufio.NewReader(f)
-	b := make([]byte, 10000)
-	n, err := r.Read(b)
-	if err != nil {
-		fmt.Println("failed to read RDB", err)
-		return err
-	}
-	fmt.Printf("n: %d \nfile content: %v\n\n", n, b[:n])
+	// f, err := os.Open(filePath)
+	// if err != nil {
+	// 	fmt.Println("failed to read RDB", err)
+	// 	os.Exit(1)
+	// }
+	// r := bufio.NewReader(f)
+	// b := make([]byte, 10000)
+	// n, err := r.Read(b)
+	// if err != nil {
+	// 	fmt.Println("failed to read RDB", err)
+	// 	return err
+	// }
+	// fmt.Printf("n: %d \nfile content: %v\n\n", n, b[:n])
 	// TODO: <<< remove this
 
 	if info, err := fd.Stat(); err == nil {
