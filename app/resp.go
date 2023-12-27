@@ -28,7 +28,7 @@ const (
 
 type Value struct {
 	Type  rune
-	Data  interface{}
+	Data  string
 	Array []Value
 }
 
@@ -53,35 +53,35 @@ func (v Value) Marshal() []byte {
 func (v Value) marshalSimpleStrings() []byte {
 	var bytes []byte
 	bytes = append(bytes, SimpleStrings)
-	bytes = append(bytes, v.Data.(string)...)
+	bytes = append(bytes, v.Data...)
 	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalSimpleErrors() []byte {
 	var bytes []byte
 	bytes = append(bytes, SimpleErrors)
-	bytes = append(bytes, v.Data.(string)...)
+	bytes = append(bytes, v.Data...)
 	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalIntegers() []byte {
 	var bytes []byte
 	bytes = append(bytes, Integers)
-	bytes = append(bytes, v.Data.(string)...)
+	bytes = append(bytes, v.Data...)
 	return append(bytes, CRLF...)
 }
 
 func (v Value) marshalBulkStrings() []byte {
 	var bytes []byte
 	bytes = append(bytes, BulkStrings)
-	if len(v.Data.(string)) == 2 && v.Data.(string) == "-1" {
-		bytes = append(bytes, v.Data.(string)...)
+	if len(v.Data) == 2 && v.Data == "-1" {
+		bytes = append(bytes, v.Data...)
 		return append(bytes, CRLF...)
 	}
-	size := strconv.FormatInt(int64(len(v.Data.(string))), 10)
+	size := strconv.FormatInt(int64(len(v.Data)), 10)
 	bytes = append(bytes, size...)
 	bytes = append(bytes, CRLF...)
-	bytes = append(bytes, v.Data.(string)...)
+	bytes = append(bytes, v.Data...)
 	return append(bytes, CRLF...)
 }
 

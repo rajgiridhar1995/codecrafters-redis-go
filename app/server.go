@@ -11,8 +11,8 @@ import (
 func main() {
 	fmt.Println("Logs from your program will appear here!")
 
-	dir := flag.String("dir", "/tmp", "The directory where RDB files are stored")
-	dbfilename := flag.String("dbfilename", "dump.rdb", "The name of the RDB file")
+	dir := flag.String("dir", "", "The directory where RDB files are stored")
+	dbfilename := flag.String("dbfilename", "", "The name of the RDB file")
 
 	flag.Parse()
 	fmt.Println("dir:", *dir)
@@ -24,11 +24,18 @@ func main() {
 		os.Exit(1)
 	}
 	conf := Config{
-		AofDir:      *dir,
-		AofFileName: *dbfilename,
+		RDBDir:      *dir,
+		RDBFileName: *dbfilename,
 	}
 	db := NewDB(conf)
 	fmt.Println("Started server")
+
+	err = db.ReadRDB()
+	if err != nil {
+		fmt.Println("failed to read RDB", err)
+		os.Exit(1)
+	}
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -57,7 +64,7 @@ func handleNewConnection(conn net.Conn, db *DB) {
 			fmt.Println("Invalid request, expected array length > 0")
 			continue
 		}
-		command := strings.ToUpper(value.Array[0].Data.(string))
+		command := strings.ToUpper(value.Array[0].Data)
 		args := value.Array[1:]
 		fmt.Println("received command", command, "args:", args)
 		handler, ok := Commands[command]

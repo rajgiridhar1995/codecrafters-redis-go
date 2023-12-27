@@ -12,6 +12,7 @@ var Commands = map[string]func(db *DB, val []Value) Value{
 	"GET":    commandGet,
 	"SET":    commandSet,
 	"CONFIG": commandConfig,
+	"KEYS":   commandKeys,
 }
 
 func commandPing(db *DB, args []Value) Value {
@@ -47,7 +48,7 @@ func commandGet(db *DB, args []Value) Value {
 			Data: "ERR wrong number of arguments for 'get' command",
 		}
 	}
-	key := args[0].Data.(string)
+	key := args[0].Data
 	db.lock.Lock()
 	defer db.lock.Unlock()
 	val, ok := db.db[key]
@@ -56,9 +57,8 @@ func commandGet(db *DB, args []Value) Value {
 			Type: Nulls,
 		}
 	}
-	if exp, ok := db.expiration[key]; ok && time.Now().After(exp) {
+	if val.HasExpiry && time.Now().After(val.Expires) {
 		delete(db.db, key)
-		delete(db.expiration, key)
 		return Value{
 			Type: BulkStrings,
 			Data: "-1",
@@ -67,7 +67,7 @@ func commandGet(db *DB, args []Value) Value {
 
 	return Value{
 		Type: BulkStrings,
-		Data: val,
+		Data: val.Value,
 	}
 }
 
@@ -78,14 +78,13 @@ func commandSet(db *DB, args []Value) Value {
 			Data: "ERR wrong number of arguments for 'set' command",
 		}
 	}
-	key := args[0].Data.(string)
-	val := args[1].Data.(string)
+	key := args[0].Data
+	val := KeyValue{
+		Value: args[1].Data,
+	}
 
-	db.lock.Lock()
-	db.db[key] = val
-	defer db.lock.Unlock()
-	if len(args) >= 4 && strings.ToUpper(args[2].Data.(string)) == "PX" {
-		px, err := strconv.Atoi(args[3].Data.(string))
+	if len(args) >= 4 && strings.ToUpper(args[2].Data) == "PX" {
+		px, err := strconv.Atoi(args[3].Data)
 		if err != nil {
 			return Value{
 				Type: SimpleErrors,
@@ -93,8 +92,14 @@ func commandSet(db *DB, args []Value) Value {
 			}
 		}
 		expirationTime := time.Now().Add(time.Duration(px) * time.Millisecond)
-		db.expiration[key] = expirationTime
+		val.HasExpiry = true
+		val.Expires = expirationTime
 	}
+
+	db.lock.Lock()
+	db.db[key] = val
+	defer db.lock.Unlock()
+
 	return Value{
 		Type: SimpleStrings,
 		Data: "OK",
@@ -113,7 +118,7 @@ func commandConfig(db *DB, args []Value) Value {
 		Array: []Value{},
 	}
 	// TODO check for first args
-	configKey := args[1].Data.(string)
+	configKey := args[1].Data
 	switch strings.ToUpper(configKey) {
 	case "DIR":
 		v.Array = append(v.Array, Value{
@@ -122,7 +127,7 @@ func commandConfig(db *DB, args []Value) Value {
 		})
 		v.Array = append(v.Array, Value{
 			Type: SimpleStrings,
-			Data: db.config.AofDir,
+			Data: db.config.RDBDir,
 		})
 	case "DBFILENAME":
 		v.Array = append(v.Array, Value{
@@ -131,8 +136,30 @@ func commandConfig(db *DB, args []Value) Value {
 		})
 		v.Array = append(v.Array, Value{
 			Type: SimpleStrings,
-			Data: db.config.AofFileName,
+			Data: db.config.RDBFileName,
 		})
 	}
+	return v
+}
+
+func commandKeys(db *DB, args []Value) Value {
+	if len(args) != 1 {
+		return Value{
+			Type: SimpleErrors,
+			Data: "ERR wrong number of arguments for 'keys' command",
+		}
+	}
+	v := Value{
+		Type:  Arrays,
+		Array: []Value{},
+	}
+	db.lock.Lock()
+	for key := range db.db {
+		v.Array = append(v.Array, Value{
+			Type: BulkStrings,
+			Data: key,
+		})
+	}
+	db.lock.Unlock()
 	return v
 }
