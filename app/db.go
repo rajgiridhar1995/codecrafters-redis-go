@@ -49,7 +49,7 @@ func (db *DB) ReadRDB() error {
 		return nil
 	}
 
-	// TODO: remove this
+	// TODO: remove this >>>
 	f, err := os.Open(filePath)
 	if err != nil {
 		fmt.Println("failed to read RDB", err)
@@ -63,6 +63,7 @@ func (db *DB) ReadRDB() error {
 		return err
 	}
 	fmt.Printf("n: %d \nfile content: %v\n\n", n, b[:n])
+	// TODO: <<< remove this
 
 	if info, err := fd.Stat(); err == nil {
 		fmt.Println("file size:", info.Size())
@@ -276,7 +277,6 @@ func readLengthEncoding(reader *bufio.Reader) (int, error) {
 		fmt.Println(err)
 		return 0, err
 	}
-
 	// fmt.Println("num:", num)
 	switch {
 	case num <= 0b00111111: // bits: 00xxxxxx
