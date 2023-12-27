@@ -50,19 +50,19 @@ func (db *DB) ReadRDB() error {
 	}
 
 	// TODO: remove this >>>
-	// f, err := os.Open(filePath)
-	// if err != nil {
-	// 	fmt.Println("failed to read RDB", err)
-	// 	os.Exit(1)
-	// }
-	// r := bufio.NewReader(f)
-	// b := make([]byte, 10000)
-	// n, err := r.Read(b)
-	// if err != nil {
-	// 	fmt.Println("failed to read RDB", err)
-	// 	return err
-	// }
-	// fmt.Printf("n: %d \nfile content: %v\n\n", n, b[:n])
+	f, err := os.Open(filePath)
+	if err != nil {
+		fmt.Println("failed to read RDB", err)
+		os.Exit(1)
+	}
+	r := bufio.NewReader(f)
+	b := make([]byte, 10000)
+	n, err := r.Read(b)
+	if err != nil {
+		fmt.Println("failed to read RDB", err)
+		return err
+	}
+	fmt.Printf("n: %d \nfile content: %v\n\n", n, b[:n])
 	// TODO: <<< remove this
 
 	if info, err := fd.Stat(); err == nil {
@@ -153,6 +153,7 @@ func (db *DB) ReadRDB() error {
 				return err
 			}
 			expireTimestamp := int64(binary.BigEndian.Uint32(expiry))
+			fmt.Println("expireTimestamp:", expireTimestamp)
 
 			valueType, err := reader.ReadByte()
 			if err != nil {
@@ -189,7 +190,8 @@ func (db *DB) ReadRDB() error {
 				fmt.Println("failed to read RDB", err)
 				return err
 			}
-			expireTimestampMs := int64(binary.BigEndian.Uint64(expiry))
+			expireTimestampMs := int64(binary.LittleEndian.Uint64(expiry))
+			fmt.Println("expireTimestampMs:", expireTimestampMs)
 
 			valueType, err := reader.ReadByte()
 			if err != nil {
@@ -249,7 +251,7 @@ func (db *DB) ReadRDB() error {
 				fmt.Println("failed to read checksum", err)
 				return err
 			}
-			fmt.Println("checksum", string(bytes))
+			fmt.Println("checksum", bytes)
 			return nil
 		}
 	}

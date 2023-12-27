@@ -54,7 +54,8 @@ func commandGet(db *DB, args []Value) Value {
 	val, ok := db.db[key]
 	if !ok {
 		return Value{
-			Type: Nulls,
+			Type: BulkStrings,
+			Data: "-1",
 		}
 	}
 	if val.HasExpiry && time.Now().After(val.Expires) {
